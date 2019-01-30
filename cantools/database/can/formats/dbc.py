@@ -26,6 +26,7 @@ from ..signal import Decimal as SignalDecimal
 from ..message import Message
 from ..node import Node
 from ..internal_database import InternalDatabase
+from ..environmental_variable import EnvironmentalVariable
 
 from .utils import num
 
@@ -315,7 +316,9 @@ class DbcSpecifics(object):
     def __init__(self,
                  attributes=None,
                  attribute_definitions=None,
-                 value_tables=None):
+                 value_tables=None,
+                 environment_variables=None
+                 ):
         self._attributes = attributes
         self._attribute_definitions = attribute_definitions
 
@@ -323,6 +326,7 @@ class DbcSpecifics(object):
             value_tables = odict()
 
         self._value_tables = value_tables
+        self._environment_variables = environment_variables
 
     @property
     def attributes(self):
@@ -349,6 +353,15 @@ class DbcSpecifics(object):
         """
 
         return self._value_tables
+
+    @property
+    def environment_variables(self):
+        """An ordered dictionary of all value tables. Only valid for DBC
+        specifiers on database level.
+
+        """
+
+        return self._environment_variables
 
 
 class LongNamesConverter(object):
@@ -681,6 +694,9 @@ def _load_comments(tokens):
         elif kind == 'BU_':
             node_name = item[1]
             comments[node_name] = item[2]
+        elif kind == 'EV_':
+            environment_variable_name = item[1]
+            comments[environment_variable_name] = item[2]
 
     return comments
 
@@ -1271,6 +1287,26 @@ def get_definitions_dict(definitions, defaults):
     return result
 
 
+def _load_environment_variables(tokens, comments):
+    environment_variables = []
+
+    for environment_variable in tokens.get('EV_', []):
+        environment_variables.append(
+            EnvironmentalVariable(
+                name=environment_variable[1],
+                type=int(environment_variable[3]),
+                minimum=num(environment_variable[5]),
+                maximum=num(environment_variable[7]),
+                unit=environment_variable[9],
+                initial_value=num(environment_variable[10]),
+                id=int(environment_variable[11]),
+                access_type=environment_variable[12],
+                access_node=environment_variable[13],
+                comment=comments.get(environment_variable[1], None)
+            ))
+    return environment_variables
+
+
 def load_string(string, strict=True):
     """Parse given string.
 
@@ -1299,9 +1335,11 @@ def load_string(string, strict=True):
                               strict)
     nodes = _load_nodes(tokens, comments, attributes, attribute_definitions)
     version = _load_version(tokens)
+    environment_variables = _load_environment_variables(tokens, comments)
     dbc_specifics = DbcSpecifics(attributes=attributes.get('database', None),
                                  attribute_definitions=attribute_definitions,
-                                 value_tables=value_tables)
+                                 value_tables=value_tables,
+                                 environment_variables=environment_variables)
 
     return InternalDatabase(messages,
                             nodes,
